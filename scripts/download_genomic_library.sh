@@ -41,7 +41,7 @@ if [ -e "$LIBRARY_DIR/$library_name/.completed" ]; then
   exit 0
 fi
 case "$1" in
-  "archaea" | "bacteria" | "viral" | "human" )
+  "archaea" | "bacteria" | "viral" | "human" | "fungi" | "protozoa")
     mkdir -p $LIBRARY_DIR/$library_name
     cd $LIBRARY_DIR/$library_name
     rm -f assembly_summary.txt
