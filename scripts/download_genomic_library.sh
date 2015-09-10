@@ -40,7 +40,7 @@ case "$1" in
     if [ ! -e "lib.complete" ]
     then
       rm -f all.fna.tar.gz
-      wget $FTP_SERVER/genomes/archive/old_refseq/Bacteria/all.fna.tar.gz
+      wget --no-verbose $FTP_SERVER/genomes/archive/old_refseq/Bacteria/all.fna.tar.gz
       echo -n "Unpacking..."
       tar zxf all.fna.tar.gz
       rm all.fna.tar.gz
@@ -56,7 +56,7 @@ case "$1" in
     if [ ! -e "lib.complete" ]
     then
       rm -f plasmids.all.fna.tar.gz
-      wget $FTP_SERVER/genomes/Plasmids/plasmids.all.fna.tar.gz
+      wget --no-verbose $FTP_SERVER/genomes/Plasmids/plasmids.all.fna.tar.gz
       echo -n "Unpacking..."
       tar zxf plasmids.all.fna.tar.gz
       rm plasmids.all.fna.tar.gz
@@ -73,8 +73,8 @@ case "$1" in
     then
       rm -f all.fna.tar.gz
       rm -f all.ffn.tar.gz
-      wget $FTP_SERVER/genomes/Viruses/all.fna.tar.gz
-      wget $FTP_SERVER/genomes/Viruses/all.ffn.tar.gz
+      wget --no-verbose $FTP_SERVER/genomes/Viruses/all.fna.tar.gz
+      wget --no-verbose $FTP_SERVER/genomes/Viruses/all.ffn.tar.gz
       echo -n "Unpacking..."
       tar zxf all.fna.tar.gz
       tar zxf all.ffn.tar.gz
@@ -86,6 +86,32 @@ case "$1" in
       echo "Skipping download of viral genomes, already downloaded here."
     fi
     ;;
+  "protozoa")
+      mkdir -p $LIBRARY_DIR/Protozoa
+      cd $LIBRARY_DIR/Protozoa
+      if [ ! -e "lib.complete" ]
+      then
+          find -mindepth 1 -maxdepth 1 -type d | xargs rm -rf
+          wget --no-verbose --recursive --no-host-directories --cut-dirs=2 $FTP_SERVER/genomes/Protozoa
+          echo " complete."
+          touch "lib.complete"
+      else
+          echo "Skipping download of protozoa genomes, already downloaded here."
+      fi
+      ;;
+  "fungi")
+      mkdir -p $LIBRARY_DIR/Fungi
+      cd $LIBRARY_DIR/Fungi
+      if [ ! -e "lib.complete" ]
+      then
+          find -mindepth 1 -maxdepth 1 -type d | xargs rm -rf
+          wget --no-verbose --recursive --no-host-directories --cut-dirs=2 $FTP_SERVER/genomes/Fungi
+          echo " complete."
+          touch "lib.complete"
+      else
+          echo "Skipping download of fungi genomes, already downloaded here."
+      fi
+      ;;
   "human")
     mkdir -p $LIBRARY_DIR/Human
     cd $LIBRARY_DIR/Human
