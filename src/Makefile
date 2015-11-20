@@ -1,7 +1,14 @@
 CXX = g++
 CXXFLAGS = -Wall -O3
-ifeq (1,$(WITH_OMP))
-	CXXFLAGS += -fopenmp
+
+uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
+ifeq ($(uname_S),Linux)
+  CXXFLAGS += -fopenmp
+endif
+ifeq ($(uname_S),Darwin)
+	ifeq (1,$(WITH_OMP))
+		CXXFLAGS += -fopenmp
+	endif
 endif
 PROGS = db_sort set_lcas classify make_seqid_to_taxid_map db_shrink kmer_estimator
 
