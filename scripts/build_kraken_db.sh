@@ -72,7 +72,7 @@ else
   # Estimate hash size as 1.25 * estimated k-mer count
   if [ -z "$KRAKEN_HASH_SIZE" ]
   then
-    KRAKEN_HASH_SIZE=$(find library/ -name '*.fna' -print0 | xargs -0 cat | kmer_estimator -m 1.25 -t $KRAKEN_THREAD_CT -k $KRAKEN_KMER_LEN)
+    KRAKEN_HASH_SIZE=$(find -L library/ -name '*.fna' -print0 | xargs -0 cat | kmer_estimator -m 1.25 -t $KRAKEN_THREAD_CT -k $KRAKEN_KMER_LEN)
     echo "Hash size not specified, using '$KRAKEN_HASH_SIZE'"
   fi
 
