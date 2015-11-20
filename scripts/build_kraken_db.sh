@@ -103,7 +103,12 @@ else
     echo "Skipping step 2, database reduction already done."
   else
     start_time1=$(date "+%s.%N")
-    kdb_size=$(stat -c '%s' database.jdb)
+    if [[ $(uname) == "Darwin" ]]; then
+      kdb_size=$(stat -f '%z' database.jdb)
+    else
+      kdb_size=$(stat -c '%s' database.jdb)
+    fi
+
     idx_size=$(echo "8 * (4 ^ $KRAKEN_MINIMIZER_LEN + 2)" | bc)
     resize_needed=$(echo "scale = 10; ($kdb_size+$idx_size)/(2^30) > $KRAKEN_MAX_DB_SIZE" | bc)
     if (( resize_needed == 0 ))
