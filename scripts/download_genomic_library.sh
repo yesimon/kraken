@@ -92,7 +92,7 @@ case "$1" in
       if [ ! -e "lib.complete" ]
       then
           find -mindepth 1 -maxdepth 1 -type d | xargs rm -rf
-          wget --no-verbose --recursive --no-host-directories --cut-dirs=2 $FTP_SERVER/genomes/Protozoa
+          wget --no-verbose --recursive --no-host-directories --cut-dirs=4 $FTP_SERVER/genomes/archive/old_refseq/Protozoa
           echo " complete."
           touch "lib.complete"
       else
@@ -105,7 +105,7 @@ case "$1" in
       if [ ! -e "lib.complete" ]
       then
           find -mindepth 1 -maxdepth 1 -type d | xargs rm -rf
-          wget --no-verbose --recursive --no-host-directories --cut-dirs=2 $FTP_SERVER/genomes/Fungi
+          wget --no-verbose --recursive --no-host-directories --cut-dirs=4 $FTP_SERVER/genomes/archive/old_refseq/Fungi
           echo " complete."
           touch "lib.complete"
       else
