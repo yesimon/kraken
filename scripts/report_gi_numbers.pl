@@ -20,7 +20,7 @@
 # Reads multi-FASTA input and for each sequence ID reports a
 # tab-delimited line:
 #   <GI number> <sequence ID>
-# 
+#
 #   or in the case of a sequence with Kraken taxid information:
 #
 #   TAXID <taxonomy ID> <sequence ID>
@@ -43,7 +43,8 @@ while (<>) {
   }
 
   if ($seq_id !~ /(^|\|)gi\|(\d+)/) {
-    die "$PROG: sequence ID $seq_id lacks GI number, aborting.\n";
+      print STDERR "sequence ID $seq_id lacks GI number\n";
+    # die "$PROG: sequence ID $seq_id lacks GI number, aborting.\n";
   }
   print "$2\t$seq_id\n";
 }
