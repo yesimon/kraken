@@ -37,8 +37,9 @@ function report_time_elapsed() {
 }
 
 start_time=$(date "+%s.%N")
+DATABASE_DIR="$KRAKEN_DB_NAME"
 
-DATABASE_DIR="$KRAKEN_DB_NAME! -d "$DATABASE_DIR" ]
+if [ ! -d "$DATABASE_DIR" ];
 then
   echo "Can't find Kraken DB directory \"$KRAKEN_DB_NAME\""
   exit 1
