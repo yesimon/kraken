@@ -47,7 +47,7 @@ if (@ARGV != 2) {
 for my $file (@ARGV) {
   if (! -e $file) {
     die "$PROG: $file does not exist\n";
-  } 
+  }
   if (! (-f $file || -p $pipe)) {
     die "$PROG: $file is not a file or pipe\n";
   }
