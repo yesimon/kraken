@@ -17,7 +17,7 @@ PROGS = db_sort set_lcas classify make_seqid_to_taxid_map db_shrink kmer_estimat
 all: $(PROGS)
 
 install: $(PROGS)
-	cp $(PROGS) $(KRAKEN_DIR)/
+	cp $(PROGS) $(KRAKEN_DIR)/libexec
 
 clean:
 	rm -f $(PROGS) *.o
