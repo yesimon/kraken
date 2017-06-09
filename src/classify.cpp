@@ -135,7 +135,7 @@ void report_stats(struct timeval time1, struct timeval time2) {
 
   if (isatty(fileno(stderr)))
     cerr << "\r";
-  fprintf(stderr, 
+  fprintf(stderr,
           "%llu sequences (%.2f Mbp) processed in %.3fs (%.1f Kseq/m, %.2f Mbp/m).\n",
           (unsigned long long) total_sequences, total_bases / 1.0e6, seconds,
           total_sequences / 1.0e3 / (seconds / 60),
