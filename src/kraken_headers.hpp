@@ -38,6 +38,7 @@
 #endif
 #include <set>
 #include <sstream>
+#include <streambuf>
 #include <stdint.h>
 #include <string.h>
 #include <string>

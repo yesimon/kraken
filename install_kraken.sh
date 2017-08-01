@@ -54,7 +54,7 @@ do
 done
 
 for file in "$KRAKEN_DIR/libexec/kraken" "$KRAKEN_DIR/libexec/kraken-*"; do
-    ln -s $file "$KRAKEN_DIR/bin"
+    ln -sf $file "$KRAKEN_DIR/bin"
 done
 
 echo

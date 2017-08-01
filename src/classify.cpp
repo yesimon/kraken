@@ -39,6 +39,7 @@ void report_stats(struct timeval time1, struct timeval time2);
 
 int Num_threads = 1;
 string DB_filename, Index_filename, Nodes_filename;
+bool Pipe_DB = false;
 bool Quick_mode = false;
 bool Fastq_input = false;
 bool Print_classified = false;
@@ -68,22 +69,41 @@ int main(int argc, char **argv) {
   if (! Nodes_filename.empty())
     Parent_map = build_parent_map(Nodes_filename);
 
-  if (Populate_memory)
-    cerr << "Loading database... ";
-
   QuickFile db_file;
-  db_file.open_file(DB_filename);
-  if (Populate_memory)
-    db_file.load_file();
-  Database = KrakenDB(db_file.ptr());
+  if (!Pipe_DB) {
+    if (Populate_memory)
+      cerr << "Loading database... ";
+
+    db_file.open_file(DB_filename);
+    if (Populate_memory)
+      db_file.load_file();
+    Database = KrakenDB(db_file.ptr());
+  } else {
+    ifstream in(DB_filename.c_str(), ios::in | ios::binary);
+    if (!in) {
+    }
+    string db_string((istreambuf_iterator<char>(in)), istreambuf_iterator<char>());
+    Database = KrakenDB((char*)db_string.c_str());
+  }
   KmerScanner::set_k(Database.get_k());
 
+  KrakenDBIndex db_index;
   QuickFile idx_file;
-  idx_file.open_file(Index_filename);
-  if (Populate_memory)
-    idx_file.load_file();
-  KrakenDBIndex db_index(idx_file.ptr());
+  if (!Pipe_DB) {
+    idx_file.open_file(Index_filename);
+    if (Populate_memory)
+      idx_file.load_file();
+    db_index = KrakenDBIndex(idx_file.ptr());
+  } else {
+    ifstream in(Index_filename.c_str(), ios::in | ios::binary);
+    if (!in) {
+    }
+    string index_string((istreambuf_iterator<char>(in)), istreambuf_iterator<char>());
+    db_index = KrakenDBIndex((char*) index_string.c_str());
+  }
+
   Database.set_index(&db_index);
+
 
   if (Populate_memory)
     cerr << "complete." << endl;
@@ -354,13 +374,16 @@ void parse_command_line(int argc, char **argv) {
 
   if (argc > 1 && strcmp(argv[1], "-h") == 0)
     usage(0);
-  while ((opt = getopt(argc, argv, "d:i:t:u:n:m:o:qfcC:U:M")) != -1) {
+  while ((opt = getopt(argc, argv, "d:i:t:u:n:m:o:pqfcC:U:M")) != -1) {
     switch (opt) {
       case 'd' :
         DB_filename = optarg;
         break;
       case 'i' :
         Index_filename = optarg;
+        break;
+      case 'p' :
+        Pipe_DB = true;
         break;
       case 't' :
         sig = atoll(optarg);
@@ -440,6 +463,7 @@ void usage(int exit_code) {
        << "Options: (*mandatory)" << endl
        << "* -d filename      Kraken DB filename" << endl
        << "* -i filename      Kraken DB index filename" << endl
+       << "  -p               Kraken DB are pipes" << endl
        << "  -n filename      NCBI Taxonomy nodes file" << endl
        << "  -o filename      Output file for Kraken output" << endl
        << "  -t #             Number of threads" << endl
