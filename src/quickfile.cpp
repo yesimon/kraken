@@ -35,7 +35,7 @@ QuickFile::QuickFile(string filename_str, string mode, size_t size) {
   open_file(filename_str, mode, size);
 }
 
-void QuickFile::open_file(string filename_str, string mode, size_t size) {
+void QuickFile::open_file(string filename_str, string mode, size_t size, bool lock) {
   const char *filename = filename_str.c_str();
   int o_flags = mode == "w"
                   ? O_RDWR | O_CREAT | O_TRUNC
@@ -64,10 +64,28 @@ void QuickFile::open_file(string filename_str, string mode, size_t size) {
       err(EX_OSERR, "unable to fstat %s", filename);
     filesize = sb.st_size;
   }
-
   fptr = (char *)mmap(0, filesize, PROT_READ | PROT_WRITE, m_flags, fd, 0);
   if (fptr == MAP_FAILED)
     err(EX_OSERR, "unable to mmap %s", filename);
+  if (lock)
+    mlock(fptr, filesize);
+
+  size_t page_size = sysconf(_SC_PAGESIZE);
+  size_t n_pages = (filesize + page_size - 1) / page_size;
+
+  unsigned char* buffer = new unsigned char[n_pages];
+  mincore(fptr, filesize, buffer);
+  size_t cached_pages = 0;
+	for (size_t i = 0; i < n_pages; ++i) {
+		if (buffer[i] & 1) {
+      cached_pages++;
+    }
+  }
+  float cached_gb = (float) cached_pages * _SC_PAGESIZE / pow(1024, 3);
+  float filesize_gb = (float) n_pages * _SC_PAGESIZE / pow(1024, 3);
+  std::cerr << filename_str << " - " << cached_pages << "/" << n_pages << " of pages cached, "
+            << std::fixed << std::setprecision(2) << cached_gb << "/" << filesize_gb << " GiB, "
+            << (float) cached_pages / n_pages * 100 << "%" << std::endl;
   valid = true;
 }
 
@@ -83,6 +101,7 @@ void QuickFile::load_file() {
 
   size_t page_size = getpagesize();
   char buf[thread_ct][page_size];
+  madvise(fptr, filesize, MADV_SEQUENTIAL);
 
   #pragma omp parallel
   {

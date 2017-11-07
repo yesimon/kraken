@@ -51,6 +51,7 @@ my $kdb_file;
 my $db_size;
 my $idx_size;
 my $db_pipe = 0;
+my $lock_memory = 0;
 my $taxonomy;
 my $threads;
 my $preload = 0;
@@ -75,6 +76,7 @@ GetOptions(
   "db-size=i" => \$db_size,
   "index-size=i" => \$idx_size,
   "db-pipe" => \$db_pipe,
+  "lock-memory" => \$lock_memory,
   "taxonomy=s" => \$taxonomy,
   "quick" => \$quick,
   "min-hits=i" => \$min_hits,
@@ -163,6 +165,7 @@ push @flags, "-t", $threads if $threads > 1;
 push @flags, "-n", $taxonomy if defined $taxonomy;
 push @flags, "-q" if $quick;
 push @flags, "-p" if $db_pipe;
+push @flags, "-l" if $lock_memory;
 push @flags, "-m", $min_hits if $min_hits > 1;
 push @flags, "-f" if $fastq_input && ! $paired;  # merger always outputs FASTA
 push @flags, "-U", $unclassified_out if defined $unclassified_out;
@@ -238,6 +241,7 @@ Options:
   --db-size               Size of db file
   --index-size            Size of db index file
   --db-pipe               DB is piped
+  --lock-memory           Lock database in RAM (prevent paging)
   --quick                 Quick operation (use first hit or hits)
   --min-hits NUM          In quick op., number of hits req'd for classification
                           NOTE: this is ignored if --quick is not specified

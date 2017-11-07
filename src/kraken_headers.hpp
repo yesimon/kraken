@@ -32,6 +32,7 @@
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <map>
 #include <cmath>
 #include <omp.h>
