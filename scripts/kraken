@@ -45,6 +45,7 @@ my $quick = 0;
 my $min_hits = 1;
 my $fasta_input = 0;
 my $fastq_input = 0;
+my $fastq_output = 0;
 my $db_prefix;
 my $idx_file;
 my $kdb_file;
@@ -60,9 +61,10 @@ my $bunzip2 = 0;
 my $paired = 0;
 my $check_names = 0;
 my $only_classified_output = 0;
-my $unclassified_out;
-my $classified_out;
+my @unclassified_outfiles;
+my @classified_outfiles;
 my @outfiles;
+my $output_format = "legacy";
 
 GetOptions(
   "help" => \&display_help,
@@ -80,9 +82,10 @@ GetOptions(
   "taxonomy=s" => \$taxonomy,
   "quick" => \$quick,
   "min-hits=i" => \$min_hits,
-  "unclassified-out=s" => \$unclassified_out,
-  "classified-out=s" => \$classified_out,
+  "unclassified-out=s" => \@unclassified_outfiles,
+  "classified-out=s" => \@classified_outfiles,
   "output=s" => \@outfiles,
+  "out-fmt=s" => \$output_format,
   "preload" => \$preload,
   "paired" => \$paired,
   "check-names" => \$check_names,
@@ -167,16 +170,27 @@ push @flags, "-q" if $quick;
 push @flags, "-p" if $db_pipe;
 push @flags, "-l" if $lock_memory;
 push @flags, "-m", $min_hits if $min_hits > 1;
-push @flags, "-f" if $fastq_input && ! $paired;  # merger always outputs FASTA
-push @flags, "-U", $unclassified_out if defined $unclassified_out;
-push @flags, "-C", $classified_out if defined $classified_out;
+push @flags, "-f", if $fastq_input;
+push @flags, "-F", if $fastq_output;
 if (@outfiles) {
     foreach my $outfile (@outfiles) {
         push @flags, "-o", $outfile;
     }
 }
+if (@classified_outfiles) {
+    foreach my $outfile (@classified_outfiles) {
+        push @flags, "-U", $outfile;
+    }
+}
+if (@unclassified_outfiles) {
+    foreach my $outfile (@unclassified_outfiles) {
+        push @flags, "-U", $outfile;
+    }
+}
+push @flags, "-O", $output_format if defined $output_format;
 push @flags, "-c", if $only_classified_output;
-push @flags, "-M" if $preload;
+push @flags, "-M", if $preload;
+push @flags, "-P", if $paired;
 
 # handle piping for decompression/merging
 my @pipe_argvv;
@@ -192,6 +206,7 @@ foreach (my $i = 0; $i < @ARGV; $i++) {
         push @merge_flags, "--gz" if $gunzip;
         push @merge_flags, "--bz2" if $bunzip2;
         push @merge_flags, "--check-names" if $check_names;
+        push @merge_flags, "-O", $output_format if defined $output_format;
         @pipe_argv = ("read_merger.pl", @merge_flags, @ARGV[$i, $i+1]);
         $i++;
     }
@@ -214,9 +229,9 @@ foreach (my $i = 0; $i < @ARGV; $i++) {
         @pipe_argv = ( "<(", @pipe_argv, ")" );
     }
     push @pipe_argvv, @pipe_argv;
-
 }
 
+print STDERR join(" ", ("exec /bin/bash -c \"exec", $CLASSIFY, @flags, @pipe_argvv, "\""));
 exec join(" ", ("exec /bin/bash -c \"exec", $CLASSIFY, @flags, @pipe_argvv, "\""));
 die "$PROG: exec error: $!\n";
 
@@ -234,6 +249,7 @@ Options:
   --threads NUM           Number of threads (default: $def_thread_ct)
   --fasta-input           Input is FASTA format
   --fastq-input           Input is FASTQ format
+  --fastq-output          Output in FASTQ format
   --gzip-compressed       Input is gzip compressed
   --bzip2-compressed      Input is bzip2 compressed
   --db-index              Path for db index file
@@ -249,6 +265,8 @@ Options:
                           Print unclassified sequences to filename
   --classified-out FILENAME
                           Print classified sequences to filename
+  --out-fmt FORMAT        Format for [un]classified sequence output. supported
+                          options are: {legacy, paired, interleaved}
   --output FILENAME       Print output to filename (default: stdout); "-" will
                           suppress normal output
   --only-classified-output
@@ -260,7 +278,7 @@ Options:
   --help                  Print this message
   --version               Print version information
 
-If none of the *-input or *-compressed flags are specified, and the 
+If none of the *-input or *-compressed flags are specified, and the
 file is a regular file, automatic format detection is attempted.
 EOF
   exit $exit_code;

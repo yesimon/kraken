@@ -30,9 +30,11 @@ using namespace kraken;
 
 void parse_command_line(int argc, char **argv);
 void usage(int exit_code=EX_USAGE);
-void process_file(char *filename, ostream* kraken_output);
+void process_file(char *filename, ostream* kraken_output,
+                  string& classified_output_fn, string& unclassified_output_fn);
 void classify_sequence(DNASequence &dna, ostringstream &koss,
-                       ostringstream &coss, ostringstream &uoss);
+                       ostringstream &coss, ostringstream &uoss,
+           ostringstream &coss2, ostringstream &uoss2);
 string hitlist_string(vector<uint32_t> &taxa, vector<uint8_t> &ambig);
 set<uint32_t> get_ancestry(uint32_t taxon);
 double elapsed_seconds(struct timeval time1, struct timeval time2);
@@ -46,6 +48,8 @@ bool Pipe_DB = false;
 bool Lock_DB = false;
 bool Quick_mode = false;
 bool Fastq_input = false;
+bool Fastq_output = false;
+bool Paired_input = false;
 bool Print_classified = false;
 bool Print_unclassified = false;
 bool Populate_memory = false;
@@ -53,11 +57,10 @@ bool Only_classified_kraken_output = false;
 uint32_t Minimum_hit_count = 1;
 map<uint32_t, uint32_t> Parent_map;
 KrakenDB Database;
-string Classified_output_file, Unclassified_output_file;
 vector<string> Kraken_output_files;
-ostream *Classified_output;
-ostream *Unclassified_output;
-vector<ostream *> Kraken_outputs;
+vector<string> Classified_output_files;
+vector<string> Unclassified_output_files;
+string Output_format;
 size_t Work_unit_size = DEF_WORK_UNIT_SIZE;
 
 uint64_t total_classified = 0;
@@ -142,24 +145,10 @@ int main(int argc, char **argv) {
           "database \"loaded\" in %dm %.2fs. \n",
           (int) seconds / 60,  fmod(seconds, 60));
 
-  if (Print_classified) {
-    if (Classified_output_file == "-")
-      Classified_output = &cout;
-    else
-      Classified_output = new ofstream(Classified_output_file.c_str());
-  }
-
-  if (Print_unclassified) {
-    if (Unclassified_output_file == "-")
-      Unclassified_output = &cout;
-    else
-      Unclassified_output = new ofstream(Unclassified_output_file.c_str());
-  }
-
   size_t n_inputs = argc - optind;
   size_t n_outputs = Kraken_output_files.size();
   if (n_outputs && n_inputs != n_outputs) {
-    cerr << "Number of output files doesn't match inputs";
+    cerr << "Number of output files " << n_outputs << " doesn't match inputs " << n_inputs << endl;
     exit(EXIT_FAILURE);
   }
 
@@ -172,7 +161,6 @@ int main(int argc, char **argv) {
     total_bases = 0;
     ostream* kraken_output;
 
-
     if (!n_outputs) {
       kraken_output = &cout;
     } else {
@@ -183,7 +171,15 @@ int main(int argc, char **argv) {
         kraken_output = new ofstream(kraken_output_fn.c_str());
       }
     }
-    process_file(argv[i], kraken_output);
+    string classified_output_fn;
+    if (!Classified_output_files.empty()) {
+      classified_output_fn = Classified_output_files[j];
+    }
+    string unclassified_output_fn;
+    if (!Unclassified_output_files.empty()) {
+      unclassified_output_fn = Unclassified_output_files[j];
+    }
+    process_file(argv[i], kraken_output, classified_output_fn, unclassified_output_fn);
     gettimeofday(&tv2, NULL);
 
     report_stats(tv1, tv2);
@@ -222,7 +218,8 @@ void report_stats(struct timeval time1, struct timeval time2) {
           (total_sequences - total_classified) * 100.0 / total_sequences);
 }
 
-void process_file(char *filename, ostream* kraken_output) {
+void process_file(char *filename, ostream* kraken_output,
+                  string& classified_output_fn, string& unclassified_output_fn) {
   string file_str(filename);
   DNASequenceReader *reader;
   DNASequence dna;
@@ -232,10 +229,52 @@ void process_file(char *filename, ostream* kraken_output) {
   else
     reader = new FastaReader(file_str);
 
+  ostream* classified_output;
+  ostream* classified_output2;
+  if (Print_classified) {
+    if (classified_output_fn == "-")
+      classified_output = &cout;
+    else {
+      if (Output_format == "paired" && Fastq_output && ! classified_output_fn.empty()) {
+        classified_output  = new ofstream((classified_output_fn + "_R1.fastq").c_str());
+        classified_output2 = new ofstream((classified_output_fn + "_R2.fastq").c_str());
+      }
+      else if (Output_format == "paired" && ! Fastq_output && ! classified_output_fn.empty()) {
+        classified_output  = new ofstream((classified_output_fn + "_R1.fa").c_str());
+        classified_output2 = new ofstream((classified_output_fn + "_R2.fa").c_str());
+      }
+      else {  // legacy or interleaved
+        classified_output = new ofstream(classified_output_fn.c_str());
+        classified_output2 = new ofstream();
+      }
+    }
+  }
+
+  ostream* unclassified_output;
+  ostream* unclassified_output2;
+  if (Print_unclassified) {
+    if (unclassified_output_fn == "-")
+      unclassified_output = &cout;
+    else {
+      if (Output_format == "paired" && Fastq_output && ! classified_output_fn.empty()) {
+        unclassified_output  = new ofstream((unclassified_output_fn + "_R1.fastq").c_str());
+        unclassified_output2 = new ofstream((unclassified_output_fn + "_R2.fastq").c_str());
+      }
+      else if (Output_format == "paired" && ! Fastq_output && ! classified_output_fn.empty()) {
+        unclassified_output  = new ofstream((unclassified_output_fn + "_R1.fa").c_str());
+        unclassified_output2 = new ofstream((unclassified_output_fn + "_R2.fa").c_str());
+      }
+      else {  // legacy or interleaved
+        unclassified_output = new ofstream(unclassified_output_fn.c_str());
+        unclassified_output2 = new ofstream();
+      }
+    }
+  }
+
   #pragma omp parallel
   {
     vector<DNASequence> work_unit;
-    ostringstream kraken_output_ss, classified_output_ss, unclassified_output_ss;
+    ostringstream kraken_output_ss, classified_output_ss, classified_output_ss2, unclassified_output_ss, unclassified_output_ss2;
 
     while (reader->is_valid()) {
       work_unit.clear();
@@ -255,18 +294,27 @@ void process_file(char *filename, ostream* kraken_output) {
 
       kraken_output_ss.str("");
       classified_output_ss.str("");
+      classified_output_ss2.str("");
       unclassified_output_ss.str("");
+      unclassified_output_ss2.str("");
       for (size_t j = 0; j < work_unit.size(); j++)
         classify_sequence( work_unit[j], kraken_output_ss,
-                           classified_output_ss, unclassified_output_ss );
+                           classified_output_ss, unclassified_output_ss,
+                           classified_output_ss2, unclassified_output_ss2);
 
       #pragma omp critical(write_output)
       {
         (*kraken_output) << kraken_output_ss.str();
-        if (Print_classified)
-          (*Classified_output) << classified_output_ss.str();
-        if (Print_unclassified)
-          (*Unclassified_output) << unclassified_output_ss.str();
+        if (Print_classified) {
+          (*classified_output) << classified_output_ss.str();
+          if (Output_format == "paired")
+            (*classified_output2) << classified_output_ss2.str();
+        }
+        if (Print_unclassified) {
+          (*unclassified_output) << unclassified_output_ss.str();
+          if (Output_format == "paired")
+            (*unclassified_output2) << unclassified_output_ss2.str();
+        }
         total_sequences += work_unit.size();
         total_bases += total_nt;
         if (isatty(fileno(stderr)))
@@ -277,14 +325,21 @@ void process_file(char *filename, ostream* kraken_output) {
 
   delete reader;
   (*kraken_output) << std::flush;
-  if (Print_classified)
-    (*Classified_output) << std::flush;
-  if (Print_unclassified)
-    (*Unclassified_output) << std::flush;
+  if (Print_classified) {
+    (*classified_output) << std::flush;
+    if (Output_format == "paired")
+      (*classified_output2) << std::flush;
+   }
+  if (Print_unclassified) {
+    (*unclassified_output) << std::flush;
+    if (Output_format == "paired")
+      (*unclassified_output2) << std::flush;
+  }
 }
 
 void classify_sequence(DNASequence &dna, ostringstream &koss,
-                       ostringstream &coss, ostringstream &uoss) {
+                       ostringstream &coss, ostringstream &uoss,
+                       ostringstream &coss2, ostringstream &uoss2) {
   vector<uint32_t> taxa;
   vector<uint8_t> ambig_list;
   map<uint32_t, uint32_t> hit_counts;
@@ -328,22 +383,98 @@ void classify_sequence(DNASequence &dna, ostringstream &koss,
     call = resolve_tree(hit_counts, Parent_map);
 
   if (call)
-    #pragma omp atomic
+#pragma omp atomic
     total_classified++;
 
   if (Print_unclassified || Print_classified) {
-    ostringstream *oss_ptr = call ? &coss : &uoss;
+    ostringstream *oss_ptr;
+    ostringstream *oss_ptr2;
+    if (call) {
+      oss_ptr = &coss;
+      oss_ptr2 = &coss2;
+    }
+    else {
+      oss_ptr = &uoss;
+      oss_ptr2 = &uoss2;
+    }
     bool print = call ? Print_classified : Print_unclassified;
     if (print) {
-      if (Fastq_input) {
-        (*oss_ptr) << "@" << dna.header_line << endl
-            << dna.seq << endl
-            << "+" << endl
-            << dna.quals << endl;
+      string delimiter = "|";
+      if (Fastq_output && Output_format == "paired") {
+        size_t delimiter_pos = 0;
+        delimiter_pos = dna.header_line.find(delimiter);
+        string header1 = dna.header_line.substr(0, delimiter_pos);
+        string header2 = dna.header_line.substr(delimiter_pos + delimiter.length());
+        delimiter_pos = dna.seq.find(delimiter);
+        string seq1 = dna.seq.substr(0, delimiter_pos);
+        string seq2 = dna.seq.substr(delimiter_pos + delimiter.length());
+        delimiter_pos = dna.quals.find(delimiter);
+        string quals1 = dna.quals.substr(0, delimiter_pos);
+        string quals2 = dna.quals.substr(delimiter_pos + delimiter.length());
+        (*oss_ptr) << "@" << header1 << endl
+                   << seq1 << endl
+                   << "+" << endl
+                   << quals1 << endl;
+        (*oss_ptr2) << "@" << header2 << endl
+                    << seq2 << endl
+                    << "+" << endl
+                    << quals2 << endl;
       }
-      else {
+      else if (! Fastq_output && Output_format == "paired") {
+        size_t delimiter_pos = 0;
+        delimiter_pos = dna.header_line.find(delimiter);
+        string header1 = dna.header_line.substr(0, delimiter_pos);
+        string header2 = dna.header_line.substr(delimiter_pos + delimiter.length());
+        delimiter_pos = dna.seq.find(delimiter);
+        string seq1 = dna.seq.substr(0, delimiter_pos);
+        string seq2 = dna.seq.substr(delimiter_pos + delimiter.length());
+        (*oss_ptr) << ">" << header1 << endl
+                   << seq1 << endl;
+        (*oss_ptr2) << ">" << header2 << endl
+                    << seq2 << endl;
+      }
+      else if (Fastq_output && Output_format == "legacy") {
+        (*oss_ptr) << "@" << dna.header_line << endl
+                   << dna.seq << endl
+                   << "+" << endl
+                   << dna.quals << endl;
+      }
+      else if (Fastq_output && Output_format == "interleaved") {
+        size_t delimiter_pos = 0;
+        delimiter_pos = dna.header_line.find(delimiter);
+        string header1 = dna.header_line.substr(0, delimiter_pos);
+        string header2 = dna.header_line.substr(delimiter_pos + delimiter.length());
+        delimiter_pos = dna.seq.find(delimiter);
+        string seq1 = dna.seq.substr(0, delimiter_pos);
+        string seq2 = dna.seq.substr(delimiter_pos + delimiter.length());
+        delimiter_pos = dna.quals.find(delimiter);
+        string quals1 = dna.quals.substr(0, delimiter_pos);
+        string quals2 = dna.quals.substr(delimiter_pos + delimiter.length());
+        (*oss_ptr) << "@" << header1 << endl
+                   << seq1 << endl
+                   << "+" << endl
+                   << quals1 << endl;
+        (*oss_ptr) << "@" << header2 << endl
+                   << seq2 << endl
+                   << "+" << endl
+                   << quals2 << endl;
+      }
+      else if (! Fastq_output && Output_format == "interleaved") {
+        size_t delimiter_pos = 0;
+        delimiter_pos = dna.header_line.find(delimiter);
+        string header1 = dna.header_line.substr(0, delimiter_pos);
+        string header2 = dna.header_line.substr(delimiter_pos + delimiter.length());
+        delimiter_pos = dna.seq.find(delimiter);
+        string seq1 = dna.seq.substr(0, delimiter_pos);
+        string seq2 = dna.seq.substr(delimiter_pos + delimiter.length());
+        (*oss_ptr) << ">" << header1 << endl
+                   << seq1 << endl;
+        (*oss_ptr) << ">" << header2 << endl
+                   << seq2 << endl;
+      }
+      else if (! Fastq_output && Output_format == "legacy") {
         (*oss_ptr) << ">" << dna.header_line << endl
-            << dna.seq << endl;
+                   << dna.seq << endl;
       }
     }
   }
@@ -424,7 +555,7 @@ void parse_command_line(int argc, char **argv) {
 
   if (argc > 1 && strcmp(argv[1], "-h") == 0)
     usage(0);
-  while ((opt = getopt(argc, argv, "d:i:D:I:t:u:n:m:o:plqfcC:U:M")) != -1) {
+  while ((opt = getopt(argc, argv, "d:i:D:I:t:u:n:m:o:O:plqfFPcC:U:M")) != -1) {
     switch (opt) {
       case 'd' :
         DB_filename = optarg;
@@ -470,16 +601,23 @@ void parse_command_line(int argc, char **argv) {
       case 'f' :
         Fastq_input = true;
         break;
+      case 'F' :
+        Fastq_output = true;
+        break;
+      case 'O' :
+        std::cerr << optarg << std::endl;
+        Output_format = optarg;
+        break;
       case 'c' :
         Only_classified_kraken_output = true;
         break;
       case 'C' :
         Print_classified = true;
-        Classified_output_file = optarg;
+        Classified_output_files.push_back(optarg);
         break;
       case 'U' :
         Print_unclassified = true;
-        Unclassified_output_file = optarg;
+        Unclassified_output_files.push_back(optarg);
         break;
       case 'o' :
         Kraken_output_files.push_back(optarg);
@@ -489,6 +627,9 @@ void parse_command_line(int argc, char **argv) {
         if (sig <= 0)
           errx(EX_USAGE, "can't use nonpositive work unit size");
         Work_unit_size = sig;
+        break;
+      case 'P' :
+        Paired_input = true;
         break;
       case 'M' :
         Populate_memory = true;
@@ -514,6 +655,22 @@ void parse_command_line(int argc, char **argv) {
   if (optind == argc) {
     cerr << "No sequence data files specified" << endl;
   }
+  if (Output_format == "paired" && (Classified_output_files.empty() || Unclassified_output_files.empty())) {
+    cerr << "Can't send paired output to stdout" << endl;
+    usage();
+  }
+  if ((Output_format == "paired" || Output_format == "interleaved") && ! Paired_input) {
+    cerr << "Output format " << Output_format << " requires paired input" << endl;
+    usage();
+  }
+  if (Output_format == "legacy" && Fastq_output) {
+    cerr << "FASTQ output not supported for legacy ('N' delimited) output format. Use '--out-fmt paired'" << endl;
+    usage();
+  }
+  if (Fastq_output && ! Fastq_input) {
+    cerr << "FASTQ output requires FASTQ input" << endl;
+    usage();
+  }
 }
 
 void usage(int exit_code) {
@@ -534,7 +691,10 @@ void usage(int exit_code) {
        << "  -m #             Minimum hit count (ignored w/o -q)" << endl
        << "  -C filename      Print classified sequences" << endl
        << "  -U filename      Print unclassified sequences" << endl
+       << "  -O format        [Un]classified output format {legacy, paired}" << endl
        << "  -f               Input is in FASTQ format" << endl
+       << "  -F               Output in FASTQ format" << endl
+       << "  -P               Input files are paired." << endl
        << "  -c               Only include classified reads in output" << endl
        << "  -M               Preload database files" << endl
        << "  -h               Print this message" << endl
