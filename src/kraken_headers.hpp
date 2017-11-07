@@ -32,7 +32,9 @@
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <map>
+#include <cmath>
 #ifdef _OPENMP
 #include <omp.h>
 #endif

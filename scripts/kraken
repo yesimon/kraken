@@ -48,7 +48,10 @@ my $fastq_input = 0;
 my $db_prefix;
 my $idx_file;
 my $kdb_file;
+my $db_size;
+my $idx_size;
 my $db_pipe = 0;
+my $lock_memory = 0;
 my $taxonomy;
 my $threads;
 my $preload = 0;
@@ -59,7 +62,7 @@ my $check_names = 0;
 my $only_classified_output = 0;
 my $unclassified_out;
 my $classified_out;
-my $outfile;
+my @outfiles;
 
 GetOptions(
   "help" => \&display_help,
@@ -70,13 +73,16 @@ GetOptions(
   "fastq-input" => \$fastq_input,
   "db-index=s" => \$idx_file,
   "db-file=s" => \$kdb_file,
+  "db-size=i" => \$db_size,
+  "index-size=i" => \$idx_size,
   "db-pipe" => \$db_pipe,
+  "lock-memory" => \$lock_memory,
   "taxonomy=s" => \$taxonomy,
   "quick" => \$quick,
   "min-hits=i" => \$min_hits,
   "unclassified-out=s" => \$unclassified_out,
   "classified-out=s" => \$classified_out,
-  "output=s" => \$outfile,
+  "output=s" => \@outfiles,
   "preload" => \$preload,
   "paired" => \$paired,
   "check-names" => \$check_names,
@@ -126,8 +132,8 @@ if ($min_hits > 1 && ! $quick) {
   die "$PROG: --min_hits requires --quick to be specified\n";
 }
 
-if ($paired && @ARGV != 2) {
-  die "$PROG: --paired requires exactly two filenames\n";
+if ($paired && scalar @ARGV % 2 ) {
+  die "$PROG: --paired requires 2x filenames\n";
 }
 
 my $compressed = $gunzip || $bunzip2;
@@ -153,66 +159,65 @@ if ($auto_detect) {
 my @flags;
 push @flags, "-d", $kdb_file;
 push @flags, "-i", $idx_file;
+push @flags, "-D", $db_size if defined $db_size;
+push @flags, "-I", $idx_size if defined $idx_size;
 push @flags, "-t", $threads if $threads > 1;
 push @flags, "-n", $taxonomy if defined $taxonomy;
 push @flags, "-q" if $quick;
 push @flags, "-p" if $db_pipe;
+push @flags, "-l" if $lock_memory;
 push @flags, "-m", $min_hits if $min_hits > 1;
 push @flags, "-f" if $fastq_input && ! $paired;  # merger always outputs FASTA
 push @flags, "-U", $unclassified_out if defined $unclassified_out;
 push @flags, "-C", $classified_out if defined $classified_out;
-push @flags, "-o", $outfile if defined $outfile;
+if (@outfiles) {
+    foreach my $outfile (@outfiles) {
+        push @flags, "-o", $outfile;
+    }
+}
 push @flags, "-c", if $only_classified_output;
 push @flags, "-M" if $preload;
 
 # handle piping for decompression/merging
-my @pipe_argv;
-if ($paired) {
-  my @merge_flags;
-  push @merge_flags, "--fa" if $fasta_input;
-  push @merge_flags, "--fq" if $fastq_input;
-  push @merge_flags, "--gz" if $gunzip;
-  push @merge_flags, "--bz2" if $bunzip2;
-  push @merge_flags, "--check-names" if $check_names;
-  @pipe_argv = ("read_merger.pl", @merge_flags, @ARGV);
-}
-elsif ($compressed) {
-  if ($gunzip) {
-    @pipe_argv = ("gzip", "-dc", @ARGV);
-  }
-  elsif ($bunzip2) {
-    @pipe_argv = ("bzip2", "-dc", @ARGV);
-  }
-  else {
-    die "$PROG: unrecognized compression program! This is a Kraken bug.\n";
-  }
+my @pipe_argvv;
+foreach (my $i = 0; $i < @ARGV; $i++) {
+    my @pipe_argv;
+    my $use_pipe = 0;
+    if ($paired) {
+        $use_pipe = 1;
+
+        my @merge_flags;
+        push @merge_flags, "--fa" if $fasta_input;
+        push @merge_flags, "--fq" if $fastq_input;
+        push @merge_flags, "--gz" if $gunzip;
+        push @merge_flags, "--bz2" if $bunzip2;
+        push @merge_flags, "--check-names" if $check_names;
+        @pipe_argv = ("read_merger.pl", @merge_flags, @ARGV[$i, $i+1]);
+        $i++;
+    }
+    elsif ($compressed) {
+        $use_pipe = 1;
+
+        if ($gunzip) {
+            @pipe_argv = ("gzip", "-dc", $ARGV[$i]);
+        }
+        elsif ($bunzip2) {
+            @pipe_argv = ("bzip2", "-dc", $ARGV[$i]);
+        }
+        else {
+            die "$PROG: unrecognized compression program! This is a Kraken bug.\n";
+        }
+    } else {
+        @pipe_argv = $ARGV[$i];
+    }
+    if ($use_pipe) {
+        @pipe_argv = ( "<(", @pipe_argv, ")" );
+    }
+    push @pipe_argvv, @pipe_argv;
+
 }
 
-# if args exist, set up the pipe/fork/exec 
-if (@pipe_argv) {
-  pipe RD, WR;
-  my $pid = fork();
-  if ($pid < 0) {
-    die "$PROG: fork error: $!\n";
-  }
-  if ($pid) {
-    open STDIN, "<&RD"
-      or die "$PROG: can't dup stdin to read end of pipe: $!\n";
-    close RD;
-    close WR;
-    @ARGV = ("/dev/fd/0");  # make classifier read from pipe
-  }
-  else {
-    open STDOUT, ">&WR"
-      or die "$PROG: can't dup stdout to write end of pipe: $!\n";
-    close RD;
-    close WR;
-    exec @pipe_argv
-      or die "$PROG: can't exec $pipe_argv[0]: $!\n";
-  }
-}
-
-exec $CLASSIFY, @flags, @ARGV;
+exec join(" ", ("exec /bin/bash -c \"exec", $CLASSIFY, @flags, @pipe_argvv, "\""));
 die "$PROG: exec error: $!\n";
 
 sub usage {
@@ -233,7 +238,10 @@ Options:
   --bzip2-compressed      Input is bzip2 compressed
   --db-index              Path for db index file
   --db-file               Path for db file
+  --db-size               Size of db file
+  --index-size            Size of db index file
   --db-pipe               DB is piped
+  --lock-memory           Lock database in RAM (prevent paging)
   --quick                 Quick operation (use first hit or hits)
   --min-hits NUM          In quick op., number of hits req'd for classification
                           NOTE: this is ignored if --quick is not specified
