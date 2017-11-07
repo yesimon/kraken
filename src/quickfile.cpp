@@ -67,8 +67,17 @@ void QuickFile::open_file(string filename_str, string mode, size_t size, bool lo
   fptr = (char *)mmap(0, filesize, PROT_READ | PROT_WRITE, m_flags, fd, 0);
   if (fptr == MAP_FAILED)
     err(EX_OSERR, "unable to mmap %s", filename);
-  if (lock)
-    mlock(fptr, filesize);
+  if (lock) {
+    int ret = mlock(fptr, filesize);
+    if (ret) {
+      if (errno == ENOMEM) {
+        err(EX_OSERR, "unable to memory lock %s due to soft limits. Please set ulimit -l higher", filename);
+      }
+      else {
+        err(EX_OSERR, "unable to memory lock %s. Is there enough available memory?", filename);
+      }
+    }
+  }
 
   size_t page_size = sysconf(_SC_PAGESIZE);
   size_t n_pages = (filesize + page_size - 1) / page_size;
