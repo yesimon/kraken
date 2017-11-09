@@ -38,15 +38,19 @@ require "$KRAKEN_DIR/krakenlib.pm";
 
 my $threshold = 0;
 my $db_prefix;
+my $taxonomy_nodes;
 
 GetOptions(
   "help" => \&display_help,
   "version" => \&display_version,
   "threshold=f" => \$threshold,
+  "taxonomy-nodes=s" => \$taxonomy_nodes,
   "db=s" => \$db_prefix,
 ) or usage();
 
-eval { $db_prefix = krakenlib::find_db($db_prefix); };
+if (! defined $taxonomy_nodes) {
+    eval { $db_prefix = krakenlib::find_db($db_prefix); };
+}
 if ($@) {
   die "$PROG: $@";
 }
@@ -58,7 +62,7 @@ if ($threshold < 0 || $threshold > 1) {
 
 sub usage {
   my $exit_code = @_ ? shift : 64;
-  print STDERR "Usage: $PROG [--db KRAKEN_DB_NAME] [--threshold NUM] <kraken output file(s)>\n";
+  print STDERR "Usage: $PROG [--db KRAKEN_DB_NAME] [--taxonomy-nodes nodes.dmp] [--threshold NUM] <kraken output file(s)>\n";
   my $default_db;
   eval { $default_db = krakenlib::find_db(); };
   if (defined $default_db) {
@@ -78,7 +82,10 @@ sub display_version {
 }
 
 my %parent_map;
-load_taxonomy($db_prefix);
+if (! defined $taxonomy_nodes) {
+    $taxonomy_nodes = "$db_prefix/taxonomy/nodes.dmp";
+}
+load_taxonomy($taxonomy_nodes);
 
 while (<>) {
   chomp;
@@ -129,9 +136,9 @@ while (<>) {
 }
 
 sub load_taxonomy {
-  my $prefix = shift;
+  my $nodes_dmp = shift;
 
-  open NODES, "<", "$prefix/taxonomy/nodes.dmp"
+  open NODES, "<", $nodes_dmp
     or die "$PROG: can't open nodes file: $!\n";
   while (<NODES>) {
     chomp;

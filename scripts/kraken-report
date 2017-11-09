@@ -37,15 +37,21 @@ require "$KRAKEN_DIR/krakenlib.pm";
 
 my $show_zeros = 0;
 my $db_prefix;
+my $taxonomy_nodes;
+my $taxonomy_names;
 
 GetOptions(
   "help" => \&display_help,
   "version" => \&display_version,
   "show-zeros" => \$show_zeros,
+  "taxonomy-nodes=s" => \$taxonomy_nodes,
+  "taxonomy-names=s" => \$taxonomy_names,
   "db=s" => \$db_prefix,
 );
 
-eval { $db_prefix = krakenlib::find_db($db_prefix); };
+if (! defined $taxonomy_nodes || ! defined $taxonomy_names) {
+    eval { $db_prefix = krakenlib::find_db($db_prefix); };
+}
 if ($@) {
   die "$PROG: $@";
 }
@@ -72,7 +78,14 @@ sub display_version {
 }
 
 my (%child_lists, %name_map, %rank_map);
-load_taxonomy($db_prefix);
+
+if (!defined $taxonomy_nodes) {
+    $taxonomy_nodes = "$db_prefix/taxonomy/nodes.dmp";
+}
+if (!defined $taxonomy_names) {
+    $taxonomy_names = "$db_prefix/taxonomy/names.dmp";
+}
+load_taxonomy($taxonomy_nodes, $taxonomy_names);
 
 my %taxo_counts;
 my $seq_count = 0;
@@ -152,9 +165,10 @@ sub dfs_summation {
 }
 
 sub load_taxonomy {
-  my $prefix = shift;
+  my $taxonomy_nodes = shift;
+  my $taxonomy_names = shift;
 
-  open NAMES, "<", "$prefix/taxonomy/names.dmp"
+  open NAMES, "<", "$taxonomy_names"
     or die "$PROG: can't open names file: $!\n";
   while (<NAMES>) {
     chomp;
@@ -167,7 +181,7 @@ sub load_taxonomy {
   }
   close NAMES;
 
-  open NODES, "<", "$prefix/taxonomy/nodes.dmp"
+  open NODES, "<", "$taxonomy_nodes"
     or die "$PROG: can't open nodes file: $!\n";
   while (<NODES>) {
     chomp;

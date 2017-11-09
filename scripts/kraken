@@ -231,7 +231,6 @@ foreach (my $i = 0; $i < @ARGV; $i++) {
     push @pipe_argvv, @pipe_argv;
 }
 
-print STDERR join(" ", ("exec /bin/bash -c \"exec", $CLASSIFY, @flags, @pipe_argvv, "\""));
 exec join(" ", ("exec /bin/bash -c \"exec", $CLASSIFY, @flags, @pipe_argvv, "\""));
 die "$PROG: exec error: $!\n";
 

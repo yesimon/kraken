@@ -135,15 +135,13 @@ int main(int argc, char **argv) {
 
   Database.set_index(&db_index);
 
-
-  if (Populate_memory)
-    cerr << "complete." << endl;
-
-  gettimeofday(&dtv2, NULL);
-  double seconds = elapsed_seconds(dtv1, dtv2);
-  fprintf(stderr,
-          "database \"loaded\" in %dm %.2fs. \n",
-          (int) seconds / 60,  fmod(seconds, 60));
+  if (Populate_memory) {
+    gettimeofday(&dtv2, NULL);
+    double seconds = elapsed_seconds(dtv1, dtv2);
+    fprintf(stderr,
+            "complete. preloaded in %dm %.2fs.\n",
+            (int) seconds / 60,  fmod(seconds, 60));
+  }
 
   size_t n_inputs = argc - optind;
   size_t n_outputs = Kraken_output_files.size();
@@ -605,7 +603,6 @@ void parse_command_line(int argc, char **argv) {
         Fastq_output = true;
         break;
       case 'O' :
-        std::cerr << optarg << std::endl;
         Output_format = optarg;
         break;
       case 'c' :
