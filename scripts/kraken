@@ -179,7 +179,7 @@ if (@outfiles) {
 }
 if (@classified_outfiles) {
     foreach my $outfile (@classified_outfiles) {
-        push @flags, "-U", $outfile;
+        push @flags, "-C", $outfile;
     }
 }
 if (@unclassified_outfiles) {
@@ -206,7 +206,7 @@ foreach (my $i = 0; $i < @ARGV; $i++) {
         push @merge_flags, "--gz" if $gunzip;
         push @merge_flags, "--bz2" if $bunzip2;
         push @merge_flags, "--check-names" if $check_names;
-        push @merge_flags, "-O", $output_format if defined $output_format;
+        push @merge_flags, "--output-format", $output_format if defined $output_format;
         @pipe_argv = ("read_merger.pl", @merge_flags, @ARGV[$i, $i+1]);
         $i++;
     }

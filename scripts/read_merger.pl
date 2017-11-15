@@ -156,7 +156,7 @@ close $fh2;
           $fastq_header_regex = qr/^@(\S+)/;
       }
       else {
-          $fastq_header_regex = qr/^@(\S+\s\S+)/; # Allow one whitespace character in fastq header
+          $fastq_header_regex = qr/^@(\S+[ \t]?\S*)/; # Allow one whitespace character in fastq header
       }
       if ($buffers{$fh} =~ $fastq_header_regex) {
         $id = $1;

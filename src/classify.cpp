@@ -30,7 +30,7 @@ using namespace kraken;
 
 void parse_command_line(int argc, char **argv);
 void usage(int exit_code=EX_USAGE);
-void process_file(char *filename, ostream* kraken_output,
+void process_file(char *filename, ostream& kraken_output,
                   string& classified_output_fn, string& unclassified_output_fn);
 void classify_sequence(DNASequence &dna, ostringstream &koss,
                        ostringstream &coss, ostringstream &uoss,
@@ -157,18 +157,22 @@ int main(int argc, char **argv) {
     total_classified = 0;
     total_sequences = 0;
     total_bases = 0;
-    ostream* kraken_output;
+    streambuf* output_buf;
+    ofstream output_file;
 
     if (!n_outputs) {
-      kraken_output = &cout;
+      output_buf = cout.rdbuf();
     } else {
       string kraken_output_fn = Kraken_output_files[j];
       if (kraken_output_fn == "-") {
-        kraken_output = &cout;
+        output_buf = cout.rdbuf();
       } else {
-        kraken_output = new ofstream(kraken_output_fn.c_str());
+        output_file.open(kraken_output_fn.c_str());
+        output_buf = output_file.rdbuf();
       }
     }
+    ostream kraken_output(output_buf);
+
     string classified_output_fn;
     if (!Classified_output_files.empty()) {
       classified_output_fn = Classified_output_files[j];
@@ -216,7 +220,7 @@ void report_stats(struct timeval time1, struct timeval time2) {
           (total_sequences - total_classified) * 100.0 / total_sequences);
 }
 
-void process_file(char *filename, ostream* kraken_output,
+void process_file(char *filename, ostream& kraken_output,
                   string& classified_output_fn, string& unclassified_output_fn) {
   string file_str(filename);
   DNASequenceReader *reader;
@@ -227,47 +231,59 @@ void process_file(char *filename, ostream* kraken_output,
   else
     reader = new FastaReader(file_str);
 
-  ostream* classified_output;
-  ostream* classified_output2;
+
+  streambuf* classified_output_buf = NULL;
+  ofstream classified_output_file;
+  streambuf* classified_output2_buf = NULL;
+  ofstream classified_output2_file;
   if (Print_classified) {
     if (classified_output_fn == "-")
-      classified_output = &cout;
+      classified_output_buf = cout.rdbuf();
     else {
       if (Output_format == "paired" && Fastq_output && ! classified_output_fn.empty()) {
-        classified_output  = new ofstream((classified_output_fn + "_R1.fastq").c_str());
-        classified_output2 = new ofstream((classified_output_fn + "_R2.fastq").c_str());
+        classified_output_file.open((classified_output_fn + "_R1.fastq").c_str());
+        classified_output2_file.open((classified_output_fn + "_R2.fastq").c_str());
       }
       else if (Output_format == "paired" && ! Fastq_output && ! classified_output_fn.empty()) {
-        classified_output  = new ofstream((classified_output_fn + "_R1.fa").c_str());
-        classified_output2 = new ofstream((classified_output_fn + "_R2.fa").c_str());
+        classified_output_file.open((classified_output_fn + "_R1.fa").c_str());
+        classified_output2_file.open((classified_output_fn + "_R2.fa").c_str());
       }
       else {  // legacy or interleaved
-        classified_output = new ofstream(classified_output_fn.c_str());
-        classified_output2 = new ofstream();
+        classified_output_file.open(classified_output_fn.c_str());
       }
+      classified_output_buf = classified_output_file.rdbuf();
+      classified_output2_buf = classified_output2_file.rdbuf();
     }
-  }
 
-  ostream* unclassified_output;
-  ostream* unclassified_output2;
+  }
+  ostream classified_output(classified_output_buf);
+  ostream classified_output2(classified_output2_buf);
+
+  streambuf* unclassified_output_buf = NULL;
+  ofstream unclassified_output_file;
+  streambuf* unclassified_output2_buf = NULL;
+  ofstream unclassified_output2_file;
   if (Print_unclassified) {
     if (unclassified_output_fn == "-")
-      unclassified_output = &cout;
+      unclassified_output_buf = cout.rdbuf();
     else {
       if (Output_format == "paired" && Fastq_output && ! classified_output_fn.empty()) {
-        unclassified_output  = new ofstream((unclassified_output_fn + "_R1.fastq").c_str());
-        unclassified_output2 = new ofstream((unclassified_output_fn + "_R2.fastq").c_str());
+        unclassified_output_file.open((unclassified_output_fn + "_R1.fastq").c_str());
+        unclassified_output2_file.open((unclassified_output_fn + "_R2.fastq").c_str());
       }
       else if (Output_format == "paired" && ! Fastq_output && ! classified_output_fn.empty()) {
-        unclassified_output  = new ofstream((unclassified_output_fn + "_R1.fa").c_str());
-        unclassified_output2 = new ofstream((unclassified_output_fn + "_R2.fa").c_str());
+        unclassified_output_file.open((unclassified_output_fn + "_R1.fa").c_str());
+        unclassified_output2_file.open((unclassified_output_fn + "_R2.fa").c_str());
       }
       else {  // legacy or interleaved
-        unclassified_output = new ofstream(unclassified_output_fn.c_str());
-        unclassified_output2 = new ofstream();
+        unclassified_output_file.open(unclassified_output_fn.c_str());
       }
+      unclassified_output_buf = unclassified_output_file.rdbuf();
+      unclassified_output2_buf = unclassified_output2_file.rdbuf();
     }
   }
+  ostream unclassified_output(unclassified_output_buf);
+  ostream unclassified_output2(unclassified_output2_buf);
 
   #pragma omp parallel
   {
@@ -302,16 +318,16 @@ void process_file(char *filename, ostream* kraken_output,
 
       #pragma omp critical(write_output)
       {
-        (*kraken_output) << kraken_output_ss.str();
+        kraken_output << kraken_output_ss.str();
         if (Print_classified) {
-          (*classified_output) << classified_output_ss.str();
+          classified_output << classified_output_ss.str();
           if (Output_format == "paired")
-            (*classified_output2) << classified_output_ss2.str();
+            classified_output2 << classified_output_ss2.str();
         }
         if (Print_unclassified) {
-          (*unclassified_output) << unclassified_output_ss.str();
+          unclassified_output << unclassified_output_ss.str();
           if (Output_format == "paired")
-            (*unclassified_output2) << unclassified_output_ss2.str();
+            unclassified_output2 << unclassified_output_ss2.str();
         }
         total_sequences += work_unit.size();
         total_bases += total_nt;
@@ -322,16 +338,16 @@ void process_file(char *filename, ostream* kraken_output,
   }  // end parallel section
 
   delete reader;
-  (*kraken_output) << std::flush;
+  kraken_output << std::flush;
   if (Print_classified) {
-    (*classified_output) << std::flush;
+    classified_output << std::flush;
     if (Output_format == "paired")
-      (*classified_output2) << std::flush;
+      classified_output2 << std::flush;
    }
   if (Print_unclassified) {
-    (*unclassified_output) << std::flush;
+    unclassified_output << std::flush;
     if (Output_format == "paired")
-      (*unclassified_output2) << std::flush;
+      unclassified_output2 << std::flush;
   }
 }
 
