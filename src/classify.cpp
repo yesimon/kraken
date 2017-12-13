@@ -23,7 +23,7 @@
 #include "quickfile.hpp"
 #include "seqreader.hpp"
 
-const size_t DEF_WORK_UNIT_SIZE = 500000;
+const size_t DEF_WORK_UNIT_SIZE = 5000000;
 
 using namespace std;
 using namespace kraken;
@@ -285,54 +285,57 @@ void process_file(char *filename, ostream& kraken_output,
   ostream unclassified_output(unclassified_output_buf);
   ostream unclassified_output2(unclassified_output2_buf);
 
-  #pragma omp parallel
-  {
-    vector<DNASequence> work_unit;
-    ostringstream kraken_output_ss, classified_output_ss, classified_output_ss2, unclassified_output_ss, unclassified_output_ss2;
+  vector<DNASequence> work_unit;
 
-    while (reader->is_valid()) {
-      work_unit.clear();
-      size_t total_nt = 0;
-      #pragma omp critical(get_input)
-      {
-        while (total_nt < Work_unit_size) {
-          dna = reader->next_sequence();
-          if (! reader->is_valid())
-            break;
-          work_unit.push_back(dna);
-          total_nt += dna.seq.size();
-        }
-      }
-      if (total_nt == 0)
+  while (reader->is_valid()) {
+    work_unit.clear();
+    size_t total_nt = 0;
+    while (total_nt < Work_unit_size) {
+      dna = reader->next_sequence();
+      if (! reader->is_valid())
         break;
+      work_unit.push_back(dna);
+      total_nt += dna.seq.size();
+    }
+    if (total_nt == 0)
+      break;
 
+    total_sequences += work_unit.size();
+    total_bases += total_nt;
+
+    #pragma omp parallel
+    {
+      ostringstream kraken_output_ss, classified_output_ss, classified_output_ss2, unclassified_output_ss, unclassified_output_ss2;
       kraken_output_ss.str("");
       classified_output_ss.str("");
       classified_output_ss2.str("");
       unclassified_output_ss.str("");
       unclassified_output_ss2.str("");
-      for (size_t j = 0; j < work_unit.size(); j++)
+      #pragma omp for schedule(static) nowait
+      for (size_t j = 0; j < work_unit.size(); j++) {
         classify_sequence( work_unit[j], kraken_output_ss,
                            classified_output_ss, unclassified_output_ss,
                            classified_output_ss2, unclassified_output_ss2);
+      }
 
-      #pragma omp critical(write_output)
-      {
-        kraken_output << kraken_output_ss.str();
-        if (Print_classified) {
-          classified_output << classified_output_ss.str();
-          if (Output_format == "paired")
-            classified_output2 << classified_output_ss2.str();
+      #pragma omp for ordered schedule(static)
+      for (int i = 0; i < omp_get_num_threads(); i++) {
+        #pragma omp ordered
+        {
+          kraken_output << kraken_output_ss.str();
+          if (Print_classified) {
+            classified_output << classified_output_ss.str();
+            if (Output_format == "paired")
+              classified_output2 << classified_output_ss2.str();
+          }
+          if (Print_unclassified) {
+            unclassified_output << unclassified_output_ss.str();
+            if (Output_format == "paired")
+              unclassified_output2 << unclassified_output_ss2.str();
+          }
+          if (isatty(fileno(stderr)))
+            cerr << "\rProcessed " << total_sequences << " sequences (" << total_bases << " bp) ...";
         }
-        if (Print_unclassified) {
-          unclassified_output << unclassified_output_ss.str();
-          if (Output_format == "paired")
-            unclassified_output2 << unclassified_output_ss2.str();
-        }
-        total_sequences += work_unit.size();
-        total_bases += total_nt;
-        if (isatty(fileno(stderr)))
-          cerr << "\rProcessed " << total_sequences << " sequences (" << total_bases << " bp) ...";
       }
     }
   }  // end parallel section

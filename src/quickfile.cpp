@@ -92,8 +92,8 @@ void QuickFile::open_file(string filename_str, string mode, size_t size, bool lo
         cached_pages++;
       }
     }
-    float cached_gb = (float) cached_pages * _SC_PAGESIZE / pow(1024, 3);
-    float filesize_gb = (float) n_pages * _SC_PAGESIZE / pow(1024, 3);
+    double cached_gb = (double) cached_pages * page_size / pow(1024, 3);
+    double filesize_gb = (double) n_pages * page_size / pow(1024, 3);
     std::cerr << "Database file " << filename_str << " - " << cached_pages << "/" << n_pages << " of pages cached, "
               << std::fixed << std::setprecision(2) << cached_gb << "/" << filesize_gb << " GiB, "
               << (float) cached_pages / n_pages * 100 << "%" << std::endl;
